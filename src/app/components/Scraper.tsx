@@ -15,31 +15,29 @@ interface UrlStatus {
   statusCode: number | string;
 }
 
-type SortDirection = 'asc' | 'desc' | null;
-
-const isNumberStatusCode = (statusCode: number | string): statusCode is number => {
-  return typeof statusCode === 'number';
-};
+interface ProgressInfo {
+  checked: number;
+  total: number;
+  queued: number;
+}
 
 const Scraper = () => {
   const [url, setUrl] = useState('')
   const [results, setResults] = useState<UrlStatus[]>([])
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState('')
-  const [progress, setProgress] = useState(0)
+  const [progress, setProgress] = useState<ProgressInfo>({ checked: 0, total: 0, queued: 0 })
   const [statusFilter, setStatusFilter] = useState('all')
   const [urlFilter, setUrlFilter] = useState('')
   const [sortColumn, setSortColumn] = useState<'url' | 'statusCode'>('url')
-  const [sortDirection, setSortDirection] = useState<SortDirection>('asc')
-  const [totalUrls, setTotalUrls] = useState(0)
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc' | null>('asc')
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
     setIsLoading(true)
     setError('')
     setResults([])
-    setProgress(0)
-    setTotalUrls(0)
+    setProgress({ checked: 0, total: 0, queued: 0 })
 
     try {
       const response = await fetch('/api/scrape', {
@@ -67,14 +65,22 @@ const Scraper = () => {
 
           for (const line of lines) {
             if (line) {
-              const data = JSON.parse(line)
-              if (data.totalUrls) {
-                setTotalUrls(data.totalUrls)
-              } else if (data.urlStatus) {
-                setResults(prev => [...prev, data.urlStatus])
-                setProgress(prev => (results.length / totalUrls) * 100)
-              } else if (data.error) {
-                setError(data.error)
+              try {
+                const data = JSON.parse(line)
+                if (data.urlStatus) {
+                  setResults(prev => [...prev, data.urlStatus])
+                }
+                if (data.progress) {
+                  setProgress(data.progress)
+                }
+                if (data.error) {
+                  setError(data.error)
+                }
+                if (data.status === 'Completed') {
+                  setIsLoading(false)
+                }
+              } catch (err) {
+                console.error('Error parsing JSON:', err)
               }
             }
           }
@@ -85,103 +91,89 @@ const Scraper = () => {
       console.error('Error:', err)
     } finally {
       setIsLoading(false)
-      setProgress(100)
     }
   }
 
-  const filteredAndSortedResults = useMemo(() => {
-    return results
-      .filter(result => {
-        if (statusFilter === 'all') return true;
-        if (isNumberStatusCode(result.statusCode)) {
-          if (statusFilter === 'success') return result.statusCode >= 200 && result.statusCode < 300;
-          if (statusFilter === 'error') return result.statusCode >= 400;
-        } else {
-          if (statusFilter === 'error') return result.statusCode === 'Error';
-          return false;
-        }
-        return true;
-      })
-      .filter(result => result.url.toLowerCase().includes(urlFilter.toLowerCase()))
-      .sort((a, b) => {
-        if (sortColumn === 'url') {
-          return sortDirection === 'asc' 
-            ? a.url.localeCompare(b.url)
-            : b.url.localeCompare(a.url);
-        } else {
-          if (isNumberStatusCode(a.statusCode) && isNumberStatusCode(b.statusCode)) {
-            return sortDirection === 'asc'
-              ? a.statusCode - b.statusCode
-              : b.statusCode - a.statusCode;
-          } else {
-            return sortDirection === 'asc'
-              ? String(a.statusCode).localeCompare(String(b.statusCode))
-              : String(b.statusCode).localeCompare(String(a.statusCode));
+    const filteredAndSortedResults = useMemo(() => {
+        return results
+          .filter(result => {
+            if (statusFilter === 'all') return true;
+            const statusCode = Number(result.statusCode);
+            if (isNaN(statusCode)) return statusFilter === 'error';
+            if (statusFilter === 'success') return statusCode >= 200 && statusCode < 300;
+            if (statusFilter === 'redirect') return statusCode >= 300 && statusCode < 400;
+            if (statusFilter === 'error') return statusCode >= 400;
+            return true;
+          })
+          .filter(result => result.url.toLowerCase().includes(urlFilter.toLowerCase()))
+          .sort((a, b) => {
+            if (sortColumn === 'url') {
+              return sortDirection === 'asc' 
+                ? a.url.localeCompare(b.url)
+                : b.url.localeCompare(a.url);
+            } else {
+              const aCode = Number(a.statusCode);
+              const bCode = Number(b.statusCode);
+              if (isNaN(aCode) || isNaN(bCode)) {
+                return sortDirection === 'asc'
+                  ? String(a.statusCode).localeCompare(String(b.statusCode))
+                  : String(b.statusCode).localeCompare(String(a.statusCode));
+              }
+              return sortDirection === 'asc' ? aCode - bCode : bCode - aCode;
+            }
+          });
+      }, [results, statusFilter, urlFilter, sortColumn, sortDirection]);
+    
+      const handleSort = (column: 'url' | 'statusCode') => {
+        if (sortColumn === column) {
+          setSortDirection(prev => prev === 'asc' ? 'desc' : prev === 'desc' ? null : 'asc');
+          if (sortDirection === null) {
+            setSortColumn(column);
           }
+        } else {
+          setSortColumn(column);
+          setSortDirection('asc');
         }
-      });
-  }, [results, statusFilter, urlFilter, sortColumn, sortDirection]);
+      };
 
-  const handleSort = (column: 'url' | 'statusCode') => {
-    if (sortColumn === column) {
-      setSortDirection(prev => prev === 'asc' ? 'desc' : prev === 'desc' ? null : 'asc');
-      if (sortDirection === null) {
-        setSortColumn(column);
-      }
-    } else {
-      setSortColumn(column);
-      setSortDirection('asc');
-    }
-  };
-
-  const downloadCSV = () => {
-    const csvContent = "URL,Status Code\n" + filteredAndSortedResults.map(result => `"${result.url}","${result.statusCode}"`).join('\n')
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
-    const url = URL.createObjectURL(blob)
-    const link = document.createElement('a')
-    link.href = url
-    link.download = 'scraped_urls.csv'
-    document.body.appendChild(link)
-    link.click()
-    document.body.removeChild(link)
-  }
-
-  return (
-    <div className="max-w-6xl mx-auto p-4">
-      <form onSubmit={handleSubmit} className="mb-4">
-        <div className="flex gap-2">
-          <Input
-            type="url"
-            value={url}
-            onChange={(e: React.ChangeEvent<HTMLInputElement>) => setUrl(e.target.value)}
-            placeholder="Enter website URL"
-            required
-            className="flex-grow"
-          />
-          <Button type="submit" disabled={isLoading}>
-            {isLoading ? 'Scanning...' : 'Scan Site'}
-          </Button>
-        </div>
-      </form>
-
-      {(isLoading || progress > 0) && (
-        <div className="mb-4">
-          <Progress value={progress} className="w-full" />
-          <p className="text-center mt-2">{progress.toFixed(0)}% Complete</p>
-          {totalUrls > 0 && (
-            <p className="text-center">Processed: {results.length} / {totalUrls} URLs</p>
+      return (
+        <div className="max-w-6xl mx-auto p-4">
+          <form onSubmit={handleSubmit} className="mb-4">
+            <div className="flex gap-2">
+              <Input
+                type="url"
+                value={url}
+                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setUrl(e.target.value)}
+                placeholder="Enter website URL"
+                required
+                className="flex-grow"
+              />
+              <Button type="submit" disabled={isLoading}>
+                {isLoading ? 'Scanning...' : 'Scan Site'}
+              </Button>
+            </div>
+          </form>
+    
+          {(isLoading || progress.checked > 0) && (
+            <div className="mb-4">
+              <Progress value={(progress.checked / (progress.total + progress.queued)) * 100} className="w-full" />
+              <p className="text-center mt-2">
+                {((progress.checked / (progress.total + progress.queued)) * 100).toFixed(2)}% Complete
+              </p>
+              <p className="text-center">
+                Checked: {progress.checked} | Total: {progress.total} | Queued: {progress.queued}
+              </p>
+            </div>
           )}
-        </div>
-      )}
+    
+          {error && (
+            <Alert variant="destructive" className="mb-4">
+              <AlertTitle>Error</AlertTitle>
+              <AlertDescription>{error}</AlertDescription>
+            </Alert>
+          )}
 
-      {error && (
-        <Alert variant="destructive" className="mb-4">
-          <AlertTitle>Error</AlertTitle>
-          <AlertDescription>{error}</AlertDescription>
-        </Alert>
-      )}
-
-      {results.length > 0 && (
+{results.length > 0 && (
         <div>
           <div className="flex justify-between items-center mb-4">
             <h2 className="text-xl font-semibold">Results: {filteredAndSortedResults.length} URLs</h2>
@@ -193,10 +185,11 @@ const Scraper = () => {
                 <SelectContent>
                   <SelectItem value="all">All</SelectItem>
                   <SelectItem value="success">Success (2xx)</SelectItem>
+                  <SelectItem value="redirect">Redirect (3xx)</SelectItem>
                   <SelectItem value="error">Error (4xx, 5xx)</SelectItem>
                 </SelectContent>
               </Select>
-              <Button onClick={downloadCSV}>Download CSV</Button>
+              <Button onClick={() => {/* Implement CSV download */}}>Download CSV</Button>
             </div>
           </div>
           <div className="border rounded-md">
@@ -220,7 +213,7 @@ const Scraper = () => {
                       placeholder="Filter URLs"
                       value={urlFilter}
                       onChange={(e) => setUrlFilter(e.target.value)}
-                      className="mt-2"
+                      className="my-2"
                     />
                   </TableHead>
                   <TableHead className="text-right">
