@@ -1,11 +1,14 @@
 // src/app/api/scrape/route.ts
+
 import axios from 'axios';
 import pLimit from 'p-limit';
 import * as cheerio from 'cheerio';
+import { parse } from 'json2csv';
 
 interface UrlStatus {
   url: string;
   statusCode: number | string;
+  origin?: string;
 }
 
 const DEFAULT_USER_AGENT = 'LLw7Ra4T5fuF';
@@ -15,13 +18,12 @@ const MAX_URLS = 10000; // Limit the number of URLs to check
 
 const limit = pLimit(CONCURRENT_REQUESTS);
 
-
 function isValidUrl(url: string, baseUrl: string): boolean {
   const disallowedExtensions = ['.php', '.js', '.css', '.png', '.jpg', '.jpeg', '.gif', '.svg', '.pdf'];
-  
+
   try {
     const parsedUrl = new URL(url, baseUrl);
-    
+
     // Ensure it's on the same domain
     if (parsedUrl.origin !== new URL(baseUrl).origin) {
       return false;
@@ -44,7 +46,7 @@ function isValidUrl(url: string, baseUrl: string): boolean {
   }
 }
 
-async function checkUrlStatus(url: string): Promise<UrlStatus> {
+async function checkUrlStatus(url: string, origin: string): Promise<UrlStatus> {
   try {
     const response = await axios.get(url, {
       timeout: REQUEST_TIMEOUT,
@@ -56,12 +58,13 @@ async function checkUrlStatus(url: string): Promise<UrlStatus> {
         return status >= 200 && status < 600;
       },
     });
-    return { url, statusCode: response.status };
+    return { url, statusCode: response.status, origin };
   } catch (error) {
     if (axios.isAxiosError(error) && error.response) {
-      return { url, statusCode: error.response.status };
+      return { url, statusCode: error.response.status, origin };
     }
-    return { url, statusCode: 'Error' };
+    // Include original URL for 404 errors
+    return { url, statusCode: 'Error', origin };
   }
 }
 
@@ -84,14 +87,14 @@ async function crawlAndCheck(
   writeToStream: (data: string) => Promise<void>,
   maxDepth: number = 2
 ) {
-  const queue: { url: string; depth: number }[] = urlsToCheck.map((url) => ({ url: stripFragmentAndQuery(url), depth: 0 }));
+  const queue: { url: string; depth: number; origin: string }[] = urlsToCheck.map((url) => ({ url: stripFragmentAndQuery(url), depth: 0, origin: baseUrl }));
   let checkedCount = 0;
   let queuedCount = queue.length;
 
   while (queue.length > 0 && processedUrls.size < MAX_URLS) {
     const batch = queue.splice(0, CONCURRENT_REQUESTS);
     const results = await Promise.all(
-      batch.map(({ url, depth }) =>
+      batch.map(({ url, depth, origin }) =>
         limit(async () => {
           const strippedUrl = stripFragmentAndQuery(url);
           if (processedUrls.has(strippedUrl)) return null;
@@ -102,7 +105,7 @@ async function crawlAndCheck(
             return null;
           }
 
-          const status = await checkUrlStatus(url);
+          const status = await checkUrlStatus(url, origin);
           checkedCount++;
           await writeToStream(
             JSON.stringify({
@@ -134,7 +137,7 @@ async function crawlAndCheck(
                     const strippedFullUrl = stripFragmentAndQuery(fullUrl);
 
                     if (isValidUrl(strippedFullUrl, baseUrl) && !processedUrls.has(strippedFullUrl)) {
-                      queue.push({ url: strippedFullUrl, depth: depth + 1 });
+                      queue.push({ url: strippedFullUrl, depth: depth + 1, origin: url });
                       queuedCount++;
                     }
                   } catch (e) {
@@ -165,7 +168,6 @@ async function crawlAndCheck(
   );
 }
 
-
 export async function POST(request: Request) {
   const encoder = new TextEncoder();
   const stream = new TransformStream();
@@ -179,7 +181,7 @@ export async function POST(request: Request) {
     try {
       const { url } = await request.json();
       console.log('Received URL:', url);
-      
+
       if (!url) {
         await writeToStream(JSON.stringify({ error: 'URL is required' }));
         return;
