@@ -14,7 +14,7 @@ Installation Steps:
 Clone the repository: Open a terminal (Mac/Linux) or command prompt (Windows), and clone the repository:
 
 bash
-git clone https://github.com/yourusername/autocrawl.git
+git clone https://github.com/vande012/autocrawl.git
 
 Navigate into the project directory:
 
