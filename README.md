@@ -1,26 +1,69 @@
-<<<<<<< HEAD
-This is a [Next.js](https://nextjs.org/) project bootstrapped with [`create-next-app`](https://github.com/vercel/next.js/tree/canary/packages/create-next-app).
-
 ## Getting Started
 
-First, run the development server:
+Getting Started
+To install and run the app locally on Mac and PC, follow these steps:
 
-```bash
+Prerequisites:
+Ensure you have the following installed:
+
+Node.js (version 14 or higher)
+npm (comes with Node.js) or an alternative package manager like yarn, pnpm, or bun.
+Git
+
+Installation Steps:
+Clone the repository: Open a terminal (Mac/Linux) or command prompt (Windows), and clone the repository:
+
+bash
+git clone https://github.com/yourusername/autocrawl.git
+
+Navigate into the project directory:
+
+bash
+cd autocrawl
+
+Install dependencies: You can install the project dependencies using your preferred package manager:
+
+For npm:
+bash
+npm install
+
+For yarn:
+bash
+yarn install
+
+For pnpm:
+bash
+pnpm install
+
+For bun:
+bash
+bun install
+
+Run the development server: Start the server using the appropriate command based on your package manager:
+
+For npm:
+bash
 npm run dev
-# or
+
+For yarn:
+bash
 yarn dev
-# or
+
+For pnpm:
+bash
 pnpm dev
-# or
+
+For bun:
+bash
 bun dev
-```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open the app in your browser: Once the server is running, open your browser and go to:
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+http://localhost:3000
 
-This project uses [`next/font`](https://nextjs.org/docs/basic-features/font-optimization) to automatically optimize and load Inter, a custom Google Font.
+You should see your app running!
 
+Start Editing: You can begin editing the app by modifying the file app/page.tsx. The changes will auto-update as you save.
 ## Learn More
 
 To learn more about Next.js, take a look at the following resources:
