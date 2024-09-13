@@ -132,6 +132,24 @@ const Scraper = () => {
       .filter((result) =>
         result.url.toLowerCase().includes(urlFilter.toLowerCase())
       )
+      .map((result) => {
+        const statusCode = Number(result.statusCode);
+        let color = "black"; // Default color
+  
+        if (!isNaN(statusCode)) {
+          if (statusCode >= 200 && statusCode < 300) {
+            color = "green";
+          } else if (statusCode >= 300 && statusCode < 400) {
+            color = "orange";
+          } else if (statusCode >= 400) {
+            color = "red";
+          }
+        } else if (statusFilter === "error") {
+          color = "red";
+        }
+  
+        return { ...result, color };
+      })
       .sort((a, b) => {
         if (sortColumn === "url") {
           return sortDirection === "asc"
@@ -153,6 +171,7 @@ const Scraper = () => {
         }
       });
   }, [results, statusFilter, urlFilter, sortColumn, sortDirection]);
+  
 
   const handleSort = (column: "url" | "statusCode" | "origin") => {
     if (sortColumn === column) {
@@ -329,7 +348,9 @@ const Scraper = () => {
                 {filteredAndSortedResults.map((result, index) => (
                   <TableRow key={index}>
                     <TableCell>{result.url}</TableCell>
-                    <TableCell>{result.statusCode}</TableCell>
+                    <TableCell style={{ color: result.color, fontSize: '16px', fontWeight: 'bold' }}>
+                      {result.statusCode}
+                    </TableCell>
                     <TableCell>{result.origin || "N/A"}</TableCell>
                   </TableRow>
                 ))}
