@@ -4,7 +4,7 @@ import Image from "next/image";
 
 export default function ScraperPage() {
   return (
-    <div className="container mx-auto py-4 px-4">
+    <div className="container mx-auto py-4 px-4 bg-gray-300">
       <div className="flex flex-col md:flex-row items-center md:items-start mb-6">
         <div className="md:mr-8 mb-4 md:mb-0">
           <Image

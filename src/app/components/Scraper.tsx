@@ -204,7 +204,7 @@ const Scraper = () => {
 
   return (
     <div className="max-w-6xl mx-auto p-4">
-      <form onSubmit={handleSubmit} className="mb-4">
+      <form onSubmit={handleSubmit} className="mb-4 bg-white">
         <div className="flex gap-2">
           <Input
             type="url"
@@ -272,7 +272,7 @@ const Scraper = () => {
               <Button onClick={downloadCSV}>Download CSV</Button>
             </div>
           </div>
-          <div className="border rounded-md">
+          <div className="border rounded-md bg-white">
             <Table>
               <TableHeader>
                 <TableRow>
