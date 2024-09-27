@@ -135,7 +135,7 @@ const Scraper = () => {
       .map((result) => {
         const statusCode = Number(result.statusCode);
         let color = "black"; // Default color
-  
+
         if (!isNaN(statusCode)) {
           if (statusCode >= 200 && statusCode < 300) {
             color = "green";
@@ -147,7 +147,7 @@ const Scraper = () => {
         } else if (statusFilter === "error") {
           color = "red";
         }
-  
+
         return { ...result, color };
       })
       .sort((a, b) => {
@@ -171,7 +171,6 @@ const Scraper = () => {
         }
       });
   }, [results, statusFilter, urlFilter, sortColumn, sortDirection]);
-  
 
   const handleSort = (column: "url" | "statusCode" | "origin") => {
     if (sortColumn === column) {
@@ -204,7 +203,7 @@ const Scraper = () => {
 
   return (
     <div className="max-w-6xl mx-auto p-4">
-      <form onSubmit={handleSubmit} className="mb-4 bg-white">
+      <form onSubmit={handleSubmit} className="mb-4">
         <div className="flex gap-2">
           <Input
             type="url"
@@ -214,7 +213,7 @@ const Scraper = () => {
             }
             placeholder="Enter website URL"
             required
-            className="flex-grow"
+            className="flex-grow bg-white"
           />
           <Button type="submit" disabled={isLoading}>
             {isLoading ? "Scanning..." : "Scan Site"}
@@ -348,7 +347,13 @@ const Scraper = () => {
                 {filteredAndSortedResults.map((result, index) => (
                   <TableRow key={index}>
                     <TableCell>{result.url}</TableCell>
-                    <TableCell style={{ color: result.color, fontSize: '16px', fontWeight: 'bold' }}>
+                    <TableCell
+                      style={{
+                        color: result.color,
+                        fontSize: "16px",
+                        fontWeight: "bold",
+                      }}
+                    >
                       {result.statusCode}
                     </TableCell>
                     <TableCell>{result.origin || "N/A"}</TableCell>
