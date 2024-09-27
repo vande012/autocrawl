@@ -1,123 +1,163 @@
+# Autocrawl
+
+Autocrawl is a web crawler that checks the status of URLs on a domain. It streams the results in real-time and supports depth-limited crawling and concurrency management. Follow the steps below to install and run the app locally.
+
 ## Getting Started
 
-Getting Started
-To install and run the app locally on Mac and PC, follow these steps:
+To install and run the app locally on Mac or PC, follow these steps:
 
-Prerequisites:
+### Prerequisites
+
 Ensure you have the following installed:
 
-Node.js (version 14 or higher)
-npm (comes with Node.js) or an alternative package manager like yarn, pnpm, or bun.
-Git
+- **Node.js** (version 14 or higher)
+- **npm** (comes with Node.js) or an alternative package manager like `yarn`, `pnpm`, or `bun`
+- **Git**
 
-Installation Steps:
-Clone the repository: Open a terminal (Mac/Linux) or command prompt (Windows), and clone the repository:
+### Installation Steps
 
-bash
-git clone https://github.com/vande012/autocrawl.git
+1. Clone the repository: Open a terminal (Mac/Linux) or command prompt (Windows), and clone the repository:
 
-Navigate into the project directory:
+    ```bash
+    git clone https://github.com/vande012/autocrawl.git
+    ```
 
-bash
-cd autocrawl
+2. Navigate into the project directory:
 
-Install dependencies: You can install the project dependencies using your preferred package manager:
+    ```bash
+    cd autocrawl
+    ```
 
-For npm:
-bash
-npm install
+3. Install dependencies using your preferred package manager:
 
-For yarn:
-bash
-yarn install
+    For npm:
 
-For pnpm:
-bash
-pnpm install
+    ```bash
+    npm install
+    ```
 
-For bun:
-bash
-bun install
+    For yarn:
 
-Run the development server: Start the server using the appropriate command based on your package manager:
+    ```bash
+    yarn install
+    ```
 
-For npm:
-bash
-npm run dev
+    For pnpm:
 
-For yarn:
-bash
-yarn dev
+    ```bash
+    pnpm install
+    ```
 
-For pnpm:
-bash
-pnpm dev
+    For bun:
 
-For bun:
-bash
-bun dev
+    ```bash
+    bun install
+    ```
 
-Open the app in your browser: Once the server is running, open your browser and go to:
+4. Run the development server using your preferred package manager:
 
-http://localhost:3000
+    For npm:
 
-You should see your app running!
+    ```bash
+    npm run dev
+    ```
 
-Start Editing: You can begin editing the app by modifying the file app/page.tsx. The changes will auto-update as you save.
+    For yarn:
+
+    ```bash
+    yarn dev
+    ```
+
+    For pnpm:
+
+    ```bash
+    pnpm dev
+    ```
+
+    For bun:
+
+    ```bash
+    bun dev
+    ```
+
+5. Open the app in your browser: Once the server is running, open your browser and go to:
+
+    ```
+    http://localhost:3000
+    ```
+
+You should now see your app running!
+
+### Start Editing
+
+You can begin editing the app by modifying the file `app/page.tsx`. The changes will auto-update as you save.
+
 ## Learn More
 
 To learn more about Next.js, take a look at the following resources:
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+- [Next.js Documentation](https://nextjs.org/docs) – learn about Next.js features and API.
+- [Learn Next.js](https://nextjs.org/learn) – an interactive Next.js tutorial.
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js/) - your feedback and contributions are welcome!
+You can also check out the [Next.js GitHub repository](https://github.com/vercel/next.js/) – your feedback and contributions are welcome!
 
 ## Deploy on Vercel
 
 The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/deployment) for more details.
+Check out the [Next.js deployment documentation](https://nextjs.org/docs/deployment) for more details.
 
+---
 
-## Overview of route.ts
+## Overview of `route.ts`
 
-Imports and Interfaces:
-The code starts by importing necessary libraries and defining an interface for the UrlStatus object.
-Constants:
-Several constants are defined, including the user agent, concurrent request limit, timeout, and maximum number of URLs to check.
-Helper Functions:
+The core of the app's crawling functionality is handled in the `route.ts` file. Here's a breakdown:
 
-isValidUrl: Checks if a URL is valid based on certain criteria (same domain, allowed file extensions).
-stripFragmentAndQuery: Removes fragments and query strings from URLs.
-checkUrlStatus: Performs an HTTP request to check the status of a given URL.
+### Imports and Interfaces
 
+The code starts by importing necessary libraries and defining an interface for the `UrlStatus` object.
 
-Main Crawling Function (crawlAndCheck):
+### Constants
+
+Several constants are defined, including:
+- User agent
+- Concurrent request limit
+- Timeout duration
+- Maximum number of URLs to check
+
+### Helper Functions
+
+- **`isValidUrl`**: Checks if a URL is valid based on certain criteria (same domain, allowed file extensions).
+- **`stripFragmentAndQuery`**: Removes fragments and query strings from URLs.
+- **`checkUrlStatus`**: Performs an HTTP request to check the status of a given URL.
+
+### Main Crawling Function (`crawlAndCheck`)
+
 This is the core function that performs the web crawling and URL checking. Here's how it works:
-a. It initializes a queue with the starting URL.
-b. It processes URLs from the queue in batches, using pLimit to limit concurrent requests.
-c. For each URL:
 
-It checks if the URL has been processed before.
-It validates the URL.
-It checks the URL's status using checkUrlStatus.
-It writes the status and progress to the stream.
-If the URL is valid and the depth limit hasn't been reached, it crawls the page for more links and adds them to the queue.
+1. Initializes a queue with the starting URL.
+2. Processes URLs from the queue in batches, using `pLimit` to limit concurrent requests.
+3. For each URL:
+    - Checks if the URL has been processed before.
+    - Validates the URL.
+    - Checks the URL's status using `checkUrlStatus`.
+    - Writes the status and progress to the stream.
+    - If the URL is valid and the depth limit hasn't been reached, it crawls the page for more links and adds them to the queue.
 
+### POST Request Handler
 
-POST Request Handler:
-This is the main function that handles the incoming POST request:
-a. It sets up a TransformStream for writing data.
-b. It extracts the URL from the request body.
-c. It calls crawlAndCheck with the provided URL.
-d. It streams the results back to the client as they become available.
-e. It handles errors and closes the stream when finished.
+This function handles the incoming POST request:
 
-The key aspects of this implementation are:
+1. Sets up a `TransformStream` for writing data.
+2. Extracts the URL from the request body.
+3. Calls `crawlAndCheck` with the provided URL.
+4. Streams the results back to the client in real-time.
+5. Handles errors and closes the stream when finished.
 
-Streaming: Instead of waiting for all URLs to be checked before sending a response, it streams results back to the client in real-time.
-Concurrency: It uses pLimit to limit the number of concurrent requests, preventing overwhelming the target server.
-Depth-limited crawling: It crawls links found on pages up to a certain depth, allowing for more comprehensive checking.
-Error handling: It catches and reports errors, both for individual URL checks and for the overall process.
-Progress reporting: It provides regular updates on the progress of the crawl.
+### Key Features
+
+- **Streaming**: Results are streamed back to the client in real-time, rather than waiting for all URLs to be checked.
+- **Concurrency**: Uses `pLimit` to limit the number of concurrent requests, preventing overload of the target server.
+- **Depth-limited crawling**: Crawls links found on pages up to a certain depth, allowing for more comprehensive checking.
+- **Error handling**: Errors are caught and reported both for individual URL checks and the overall process.
+- **Progress reporting**: Provides regular updates on the progress of the crawl.
