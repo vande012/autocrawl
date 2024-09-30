@@ -23,8 +23,7 @@ interface ResultItem {
   url: string;
   statusCode: number | string;
   origin?: string;
-  altTextMissing?: boolean;
-  imagesWithMissingAlt?: string[];
+  imagesWithoutAlt?: string[];  // Updated from imagesWithMissingAlt
   containsSearchTerm?: boolean;
 }
 
@@ -37,7 +36,7 @@ interface ResultsTableProps {
 const ResultsTable: React.FC<ResultsTableProps> = ({ results, checkAltText, searchTerm }) => {
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [urlFilter, setUrlFilter] = useState<string>("");
-  const [sortColumn, setSortColumn] = useState<keyof ResultItem>("url");
+  const [sortColumn, setSortColumn] = useState<keyof ResultItem | "altTextMissing">("url");
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("asc");
 
   const getStatusCodeClass = (statusCode: number | string): string => {
@@ -61,8 +60,11 @@ const ResultsTable: React.FC<ResultsTableProps> = ({ results, checkAltText, sear
       })
       .filter((result) => result.url.toLowerCase().includes(urlFilter.toLowerCase()))
       .sort((a, b) => {
-        const compareValues = (aVal: string, bVal: string) => {
-          return sortDirection === "asc" ? aVal.localeCompare(bVal) : bVal.localeCompare(aVal);
+        const compareValues = (aVal: string | boolean, bVal: string | boolean) => {
+          if (typeof aVal === 'boolean' && typeof bVal === 'boolean') {
+            return sortDirection === "asc" ? Number(aVal) - Number(bVal) : Number(bVal) - Number(aVal);
+          }
+          return sortDirection === "asc" ? String(aVal).localeCompare(String(bVal)) : String(bVal).localeCompare(String(aVal));
         };
 
         switch (sortColumn) {
@@ -74,13 +76,15 @@ const ResultsTable: React.FC<ResultsTableProps> = ({ results, checkAltText, sear
               : Number(b.statusCode) - Number(a.statusCode);
           case "origin":
             return compareValues(a.origin || "", b.origin || "");
+          case "altTextMissing":
+            return compareValues(!!a.imagesWithoutAlt?.length, !!b.imagesWithoutAlt?.length);
           default:
             return 0;
         }
       });
   }, [results, statusFilter, urlFilter, sortColumn, sortDirection]);
 
-  const handleSort = (column: keyof ResultItem) => {
+  const handleSort = (column: keyof ResultItem | "altTextMissing") => {
     if (sortColumn === column) {
       setSortDirection((prev) => (prev === "asc" ? "desc" : "asc"));
     } else {
@@ -92,7 +96,7 @@ const ResultsTable: React.FC<ResultsTableProps> = ({ results, checkAltText, sear
   const downloadCSV = () => {
     const fields = ['url', 'statusCode', 'origin'];
     if (checkAltText) {
-      fields.push('altTextMissing', 'imagesWithMissingAlt');
+      fields.push('imagesWithoutAlt');
     }
     if (searchTerm) {
       fields.push('containsSearchTerm');
@@ -167,7 +171,13 @@ const ResultsTable: React.FC<ResultsTableProps> = ({ results, checkAltText, sear
                   Origin {sortColumn === "origin" && (sortDirection === "asc" ? <ArrowUp className="ml-2 h-4 w-4" /> : <ArrowDown className="ml-2 h-4 w-4" />)}
                 </Button>
               </TableHead>
-              {checkAltText && <TableHead>Alt Text</TableHead>}
+              {checkAltText && (
+                <TableHead>
+                  <Button variant="ghost" onClick={() => handleSort("altTextMissing")}>
+                    Alt Text {sortColumn === "altTextMissing" && (sortDirection === "asc" ? <ArrowUp className="ml-2 h-4 w-4" /> : <ArrowDown className="ml-2 h-4 w-4" />)}
+                  </Button>
+                </TableHead>
+              )}
               {searchTerm && <TableHead>Search Term</TableHead>}
             </TableRow>
           </TableHeader>
@@ -183,20 +193,18 @@ const ResultsTable: React.FC<ResultsTableProps> = ({ results, checkAltText, sear
                 <TableCell>{result.origin || "N/A"}</TableCell>
                 {checkAltText && (
                   <TableCell>
-                    {result.altTextMissing ? (
+                    {result.imagesWithoutAlt && result.imagesWithoutAlt.length > 0 ? (
                       <div>
                         <span className="text-red-600">Missing</span>
-                        {result.imagesWithMissingAlt && result.imagesWithMissingAlt.length > 0 && (
-                          <ul className="list-disc pl-5 mt-2">
-                            {result.imagesWithMissingAlt.map((imgSrc, imgIndex) => (
-                              <li key={imgIndex}>
-                                <a href={imgSrc} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">
-                                  Image {imgIndex + 1}
-                                </a>
-                              </li>
-                            ))}
-                          </ul>
-                        )}
+                        <ul className="list-disc pl-5 mt-2">
+                          {result.imagesWithoutAlt.map((imgSrc, imgIndex) => (
+                            <li key={imgIndex}>
+                              <a href={imgSrc} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">
+                                Image {imgIndex + 1}
+                              </a>
+                            </li>
+                          ))}
+                        </ul>
                       </div>
                     ) : (
                       <span className="text-green-600">Present</span>

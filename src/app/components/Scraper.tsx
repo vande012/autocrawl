@@ -1,12 +1,12 @@
 'use client'
 
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import UrlCrawler from "./UrlCrawler";
 import ListChecker from "./ListChecker";
 import ResultsTable from "./ResultsTable";
-import { Progress } from "@/components/ui/progress";
 import { Alert } from "@/components/ui/alert";
+import { Loader2 } from "lucide-react";
 
 export interface UrlStatus {
   url: string;
@@ -17,39 +17,22 @@ export interface UrlStatus {
   containsSearchTerm?: boolean;
 }
 
-interface ProgressInfo {
-  checked: number;
-  total: number;
-  queued: number;
-}
-
 const Scraper: React.FC = () => {
   const [activeTab, setActiveTab] = useState<string>("crawler");
   const [url, setUrl] = useState<string>("");
   const [results, setResults] = useState<UrlStatus[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [error, setError] = useState<string>("");
-  const [progress, setProgress] = useState<ProgressInfo>({ checked: 0, total: 1, queued: 0 });
+  const [urlsFound, setUrlsFound] = useState<number>(0);
   const [checkAltText, setCheckAltText] = useState<boolean>(false);
   const [searchTerm, setSearchTerm] = useState<string>("");
-  const [showProgress, setShowProgress] = useState<boolean>(false);
-
-  useEffect(() => {
-    if (isLoading || progress.checked > 0) {
-      setShowProgress(true);
-    } else if (progress.checked === progress.total && progress.total > 0) {
-      const timer = setTimeout(() => setShowProgress(false), 3000);
-      return () => clearTimeout(timer);
-    }
-  }, [isLoading, progress]);
 
   const handleCrawlerSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setIsLoading(true);
     setError("");
     setResults([]);
-    setProgress({ checked: 0, total: 1, queued: 1 });
-    setShowProgress(true);
+    setUrlsFound(0);
 
     try {
       const response = await fetch("/api/scrape", {
@@ -78,9 +61,7 @@ const Scraper: React.FC = () => {
               const data = JSON.parse(line.slice(6));
               if (data.urlStatus) {
                 setResults((prev) => [...prev, data.urlStatus]);
-              }
-              if (data.progress) {
-                setProgress(data.progress);
+                setUrlsFound((prev) => prev + 1);
               }
               if (data.error) {
                 setError(data.error);
@@ -130,8 +111,7 @@ const Scraper: React.FC = () => {
             setResults={setResults}
             setIsLoading={setIsLoading}
             setError={setError}
-            setProgress={setProgress}
-            setShowProgress={setShowProgress}
+            setUrlsFound={setUrlsFound}
           />
         </TabsContent>
       </Tabs>
@@ -142,24 +122,27 @@ const Scraper: React.FC = () => {
         </Alert>
       )}
 
-      {showProgress && (
-        <div className="my-4">
-          <Progress 
-            value={(progress.checked / Math.max(progress.total, 1)) * 100} 
-            className="w-full"
-          />
-          <p className="text-center mt-2">
-            {((progress.checked / Math.max(progress.total, 1)) * 100).toFixed(2)}% Complete
-          </p>
-          <p className="text-center">
-            Checked: {progress.checked} | Total: {progress.total} | Queued: {progress.queued}
-          </p>
-        </div>
-      )}
+      <div className="my-4 space-y-4">
+        {(isLoading || urlsFound > 0) && (
+          <div className="flex flex-col items-center bg-gray-100 p-4 rounded-md shadow">
+            {isLoading ? (
+              <Loader2 className="h-8 w-8 animate-spin text-blue-500" />
+            ) : (
+              <div className="h-8 w-8 rounded-full bg-green-500 flex items-center justify-center text-white font-bold">✓</div>
+            )}
+            <p className="mt-2 text-center font-semibold">
+              {isLoading ? "Crawling in progress..." : "Crawling complete"}
+            </p>
+            <p className="text-center">
+              URLs found: {urlsFound}
+            </p>
+          </div>
+        )}
 
-      {results.length > 0 && (
-        <ResultsTable results={results} checkAltText={checkAltText} searchTerm={searchTerm} />
-      )}
+        {results.length > 0 && (
+          <ResultsTable results={results} checkAltText={checkAltText} searchTerm={searchTerm} />
+        )}
+      </div>
     </div>
   );
 };

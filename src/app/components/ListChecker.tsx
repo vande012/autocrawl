@@ -1,17 +1,15 @@
 import React, { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { UrlStatus } from "./Scraper";
 
 interface ListCheckerProps {
   setResults: React.Dispatch<React.SetStateAction<any[]>>;
   setIsLoading: React.Dispatch<React.SetStateAction<boolean>>;
   setError: React.Dispatch<React.SetStateAction<string>>;
-  setProgress: React.Dispatch<React.SetStateAction<{ checked: number; total: number; queued: number }>>;
-  setShowProgress: React.Dispatch<React.SetStateAction<boolean>>;
+  setUrlsFound: React.Dispatch<React.SetStateAction<number>>;
 }
 
-const ListChecker: React.FC<ListCheckerProps> = ({ setResults, setIsLoading, setError, setProgress, setShowProgress }) => {
+const ListChecker: React.FC<ListCheckerProps> = ({ setResults, setIsLoading, setError, setUrlsFound }) => {
   const [urlList, setUrlList] = useState<string>("");
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
@@ -19,10 +17,10 @@ const ListChecker: React.FC<ListCheckerProps> = ({ setResults, setIsLoading, set
     setIsLoading(true);
     setError("");
     setResults([]);
-    setProgress({ checked: 0, total: 0, queued: 0 });
-    setShowProgress(true);
+    setUrlsFound(0);
 
     const urls = urlList.split('\n').filter(url => url.trim() !== '');
+    setUrlsFound(urls.length); // Set initial count to total number of URLs
 
     try {
       const response = await fetch("/api/check-list", {
@@ -39,7 +37,7 @@ const ListChecker: React.FC<ListCheckerProps> = ({ setResults, setIsLoading, set
       const decoder = new TextDecoder();
 
       if (reader) {
-        let checked = 0;
+        let processedCount = 0;
         while (true) {
           const { done, value } = await reader.read();
           if (done) break;
@@ -53,8 +51,8 @@ const ListChecker: React.FC<ListCheckerProps> = ({ setResults, setIsLoading, set
                 const data = JSON.parse(line.slice(6));
                 if (data.urlStatus) {
                   setResults((prev) => [...prev, data.urlStatus]);
-                  checked++;
-                  setProgress({ checked, total: urls.length, queued: urls.length - checked });
+                  processedCount++;
+                  setUrlsFound(processedCount); // Update count for each processed URL
                 }
                 if (data.error) {
                   setError(data.error);
