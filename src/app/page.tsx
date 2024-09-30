@@ -24,7 +24,7 @@ export default function ScraperPage() {
             <ul className="list-disc list-inside space-y-1 text-sm">
               <li>? Query Strings</li>
               <li>Images</li>
-              <li>Certain File Types</li>
+              <li>Certain File Types - .php .css .js</li>
               <li># or modals</li>
               <li>/inventory slugs</li>
             </ul>
