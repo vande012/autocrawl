@@ -1,214 +1,160 @@
-// src/app/api/scrape/route.ts
+// File: src/app/api/scrape/route.ts
 
+import { NextRequest, NextResponse } from 'next/server';
 import axios from 'axios';
-import pLimit from 'p-limit';
 import * as cheerio from 'cheerio';
-import { parse } from 'json2csv';
-
-interface UrlStatus {
-  url: string;
-  statusCode: number | string;
-  origin?: string;
-}
 
 const DEFAULT_USER_AGENT = 'LLw7Ra4T5fuF';
-const CONCURRENT_REQUESTS = 10;
-const REQUEST_TIMEOUT = 10000; // 10 seconds
-const MAX_URLS = 10000; // Limit the number of URLs to check
 
-const limit = pLimit(CONCURRENT_REQUESTS);
+export async function POST(request: NextRequest) {
+  const { url, checkAltText, searchTerm } = await request.json();
 
-function isValidUrl(url: string, baseUrl: string): boolean {
-  const disallowedExtensions = ['.php', '.js', '.css', '.png', '.jpg', '.jpeg', '.gif', '.svg', '.pdf'];
-
-  try {
-    const parsedUrl = new URL(url, baseUrl);
-
-    // Ensure it's on the same domain
-    if (parsedUrl.origin !== new URL(baseUrl).origin) {
-      return false;
-    }
-
-    // Strip fragment and query string
-    parsedUrl.hash = '';
-    parsedUrl.search = '';
-
-    // Check if the URL has a disallowed file extension
-    const path = parsedUrl.pathname;
-    if (disallowedExtensions.some(ext => path.endsWith(ext))) {
-      return false;
-    }
-
-    return true;
-  } catch (error) {
-    console.error(`Error parsing URL: ${url}`, error);
-    return false;
-  }
-}
-
-async function checkUrlStatus(url: string, origin: string): Promise<UrlStatus> {
-  try {
-    const response = await axios.get(url, {
-      timeout: REQUEST_TIMEOUT,
-      maxRedirects: 0,
-      headers: {
-        'User-Agent': DEFAULT_USER_AGENT,
-      },
-      validateStatus: function (status) {
-        return status >= 200 && status < 600;
-      },
-    });
-    return { url, statusCode: response.status, origin };
-  } catch (error) {
-    if (axios.isAxiosError(error) && error.response) {
-      return { url, statusCode: error.response.status, origin };
-    }
-    // Include original URL for 404 errors
-    return { url, statusCode: 'Error', origin };
-  }
-}
-
-function stripFragmentAndQuery(url: string): string {
-  try {
-    const parsedUrl = new URL(url);
-    parsedUrl.hash = ''; // Remove the fragment (anything after #)
-    parsedUrl.search = ''; // Optionally remove the query string as well
-    return parsedUrl.toString();
-  } catch (error) {
-    console.error(`Error parsing URL: ${url}`, error);
-    return url;
-  }
-}
-
-async function crawlAndCheck(
-  baseUrl: string,
-  urlsToCheck: string[],
-  processedUrls: Set<string>,
-  writeToStream: (data: string) => Promise<void>,
-  maxDepth: number = 2
-) {
-  const queue: { url: string; depth: number; origin: string }[] = urlsToCheck.map((url) => ({ url: stripFragmentAndQuery(url), depth: 0, origin: baseUrl }));
-  let checkedCount = 0;
-  let queuedCount = queue.length;
-
-  while (queue.length > 0 && processedUrls.size < MAX_URLS) {
-    const batch = queue.splice(0, CONCURRENT_REQUESTS);
-    const results = await Promise.all(
-      batch.map(({ url, depth, origin }) =>
-        limit(async () => {
-          const strippedUrl = stripFragmentAndQuery(url);
-          if (processedUrls.has(strippedUrl)) return null;
-          processedUrls.add(strippedUrl);
-
-          if (!isValidUrl(strippedUrl, baseUrl)) {
-            console.log(`Skipping invalid URL: ${strippedUrl}`);
-            return null;
-          }
-
-          const status = await checkUrlStatus(url, origin);
-          checkedCount++;
-          await writeToStream(
-            JSON.stringify({
-              urlStatus: status,
-              progress: {
-                checked: checkedCount,
-                total: processedUrls.size,
-                queued: queue.length,
-                percentage: ((checkedCount / (checkedCount + queue.length)) * 100).toFixed(2),
-              },
-            })
-          );
-
-          // Only crawl links if we haven't reached the maximum depth
-          if (status.statusCode === 200 && depth < maxDepth) {
-            try {
-              const response = await axios.get(url, {
-                timeout: REQUEST_TIMEOUT,
-                headers: { 'User-Agent': DEFAULT_USER_AGENT },
-              });
-              const $ = cheerio.load(response.data);
-              const links = $('a')
-                .map((i, el) => $(el).attr('href'))
-                .get();
-              for (const link of links) {
-                if (link) {
-                  try {
-                    const fullUrl = new URL(link, baseUrl).href;
-                    const strippedFullUrl = stripFragmentAndQuery(fullUrl);
-
-                    if (isValidUrl(strippedFullUrl, baseUrl) && !processedUrls.has(strippedFullUrl)) {
-                      queue.push({ url: strippedFullUrl, depth: depth + 1, origin: url });
-                      queuedCount++;
-                    }
-                  } catch (e) {
-                    console.error(`Invalid URL: ${link}`);
-                  }
-                }
-              }
-            } catch (error) {
-              console.error(`Error crawling ${url}:`, error);
-            }
-          }
-          return status;
-        })
-      )
-    );
+  if (!url) {
+    return NextResponse.json({ error: 'URL is required' }, { status: 400 });
   }
 
-  // Final progress report
-  await writeToStream(
-    JSON.stringify({
-      progress: {
-        checked: checkedCount,
-        total: processedUrls.size,
-        queued: queue.length,
-        percentage: ((checkedCount / (checkedCount + queue.length)) * 100).toFixed(2),
-      },
-    })
-  );
-}
-
-export async function POST(request: Request) {
   const encoder = new TextEncoder();
-  const stream = new TransformStream();
-  const writer = stream.writable.getWriter();
 
-  const writeToStream = async (data: string) => {
-    await writer.write(encoder.encode(data + '\n'));
-  };
+  const stream = new ReadableStream({
+    async start(controller) {
+      try {
+        // Initialize the crawler
+        const crawler = new Crawler(url, checkAltText, searchTerm);
+        
+        // Start crawling
+        await crawler.crawl((data) => {
+          controller.enqueue(encoder.encode(`data: ${JSON.stringify(data)}\n\n`));
+        });
 
-  (async () => {
-    try {
-      const { url } = await request.json();
-      console.log('Received URL:', url);
-
-      if (!url) {
-        await writeToStream(JSON.stringify({ error: 'URL is required' }));
-        return;
+        controller.enqueue(encoder.encode(`data: ${JSON.stringify({ status: 'Completed' })}\n\n`));
+      } catch (error) {
+        console.error('Crawling error:', error);
+        let errorMessage = 'An error occurred while crawling';
+        if (error instanceof Error) {
+          errorMessage = error.message;
+        }
+        controller.enqueue(encoder.encode(`data: ${JSON.stringify({ error: errorMessage })}\n\n`));
       }
-
-      const processedUrls = new Set<string>();
-
-      // Start crawling from the provided URL
-      await writeToStream(JSON.stringify({ status: 'Crawling and checking URLs' }));
-      await crawlAndCheck(url, [url], processedUrls, writeToStream);
-
-      await writeToStream(JSON.stringify({ status: 'Completed' }));
-    } catch (error: unknown) {
-      console.error('Error:', error);
-      let errorMessage = 'An error occurred while fetching data';
-      if (error instanceof Error) {
-        errorMessage += `: ${error.message}`;
-      } else if (typeof error === 'string') {
-        errorMessage += `: ${error}`;
-      }
-      await writeToStream(JSON.stringify({ error: errorMessage }));
-    } finally {
-      await writer.close();
     }
-  })();
-
-  return new Response(stream.readable, {
-    headers: { 'Content-Type': 'text/plain; charset=utf-8' },
   });
+
+  return new NextResponse(stream, {
+    headers: {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache',
+      'Connection': 'keep-alive',
+    },
+  });
+}
+
+class Crawler {
+  private baseUrl: string;
+  private checkAltText: boolean;
+  private searchTerm: string;
+  private visited: Set<string> = new Set();
+  private total: number = 0;
+  private checked: number = 0;
+
+  constructor(baseUrl: string, checkAltText: boolean, searchTerm: string) {
+    this.baseUrl = baseUrl;
+    this.checkAltText = checkAltText;
+    this.searchTerm = searchTerm;
+  }
+
+  async crawl(sendUpdate: (data: any) => void) {
+    this.total = 1; // Start with at least one URL (the base URL)
+    await this.crawlPage(this.baseUrl, sendUpdate);
+  }
+
+  private isValidUrl(url: string): boolean {
+    const parsedUrl = new URL(url);
+    const path = parsedUrl.pathname;
+    
+    // Exclude specific patterns
+    if (
+      url.includes('#') ||
+      path.startsWith('/inventory') ||
+      path.endsWith('.php') ||
+      path.endsWith('.css') ||
+      path.endsWith('.js') ||
+      parsedUrl.search !== ''  // Excludes query strings
+    ) {
+      return false;
+    }
+    
+    return parsedUrl.origin === new URL(this.baseUrl).origin;
+  }
+
+  private async crawlPage(url: string, sendUpdate: (data: any) => void) {
+    if (this.visited.has(url)) return;
+    this.visited.add(url);
+
+    try {
+      const response = await axios.get(url, {
+        headers: {
+          'User-Agent': DEFAULT_USER_AGENT
+        }
+      });
+      const $ = cheerio.load(response.data);
+
+      const urlStatus: any = {
+        url,
+        statusCode: response.status,
+        origin: new URL(url).origin,
+      };
+
+      if (this.checkAltText) {
+        const imagesWithMissingAlt = $('img:not([alt])').map((_, el) => $(el).attr('src')).get();
+        urlStatus.altTextMissing = imagesWithMissingAlt.length > 0;
+        urlStatus.imagesWithMissingAlt = imagesWithMissingAlt;
+      }
+
+      if (this.searchTerm) {
+        urlStatus.containsSearchTerm = response.data.includes(this.searchTerm);
+      }
+
+      sendUpdate({ urlStatus });
+
+      // Find all links on the page
+      $('a').each((_, element) => {
+        const href = $(element).attr('href');
+        if (href) {
+          try {
+            const newUrl = new URL(href, url).href;
+            if (this.isValidUrl(newUrl) && !this.visited.has(newUrl)) {
+              this.crawlPage(newUrl, sendUpdate);
+            }
+          } catch (error) {
+            console.error(`Invalid URL: ${href}`);
+          }
+        }
+      });
+    } catch (error) {
+      console.error(`Error crawling ${url}:`, error);
+      let statusCode: number | string = 'Error';
+      let errorMessage = 'An unknown error occurred';
+      
+      if (axios.isAxiosError(error)) {
+        statusCode = error.response?.status || 'Error';
+        errorMessage = error.message;
+      } else if (error instanceof Error) {
+        errorMessage = error.message;
+      }
+
+      this.checked++;
+      sendUpdate({
+        urlStatus: {
+          url,
+          statusCode,
+          origin: new URL(url).origin,
+          error: errorMessage
+        },
+        progress: {
+          checked: this.checked,
+          total: this.total,
+          queued: this.total - this.checked
+        }
+      });
+    }
+  }
 }
