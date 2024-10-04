@@ -1,114 +1,93 @@
 # Autocrawl
-
-Autocrawl is a web crawler that checks the status of URLs on a domain. It streams the results in real-time and supports depth-limited crawling and concurrency management. Follow the steps below to install and run the app locally.
+Autocrawl is a web crawler that checks the status of URLs on a domain. It streams the results in real-time and supports depth-limited crawling and concurrency management. Follow the steps below to install and run the app locally or using Docker.
 
 ## Getting Started
+You can run Autocrawl either using Docker or locally. Choose the method that best suits your needs.
 
+### Option 1: Running with Docker
+1. Pull the Docker image:
+    ```bash
+    docker pull vande012/autocrawl:latest
+    ```
+
+2. Run the container:
+    ```bash
+    docker run -p 3000:3000 vande012/autocrawl:latest
+    ```
+
+3. Open your browser and go to `http://localhost:3000` to use the app.
+
+### Option 2: Running Locally
 To install and run the app locally on Mac or PC, follow these steps:
 
-### Prerequisites
-
+#### Prerequisites
 Ensure you have the following installed:
-
 - **Node.js** (version 14 or higher)
 - **npm** (comes with Node.js) or an alternative package manager like `yarn`, `pnpm`, or `bun`
 - **Git**
 
-### Installation Steps
-
+#### Installation Steps
 1. Clone the repository: Open a terminal (Mac/Linux) or command prompt (Windows), and clone the repository:
-
     ```bash
     git clone https://github.com/vande012/autocrawl.git
     ```
 
 2. Navigate into the project directory:
-
     ```bash
     cd autocrawl
     ```
 
 3. Install dependencies using your preferred package manager:
-
-    For npm:
-
     ```bash
     npm install
     ```
-
-    For yarn:
-
+    Or if using an alternative package manager:
     ```bash
     yarn install
     ```
-
-    For pnpm:
-
     ```bash
     pnpm install
     ```
-
-    For bun:
-
     ```bash
     bun install
     ```
 
-4. Run the development server using your preferred package manager:
-
-    For npm:
-
+4. Run the development server:
     ```bash
     npm run dev
     ```
-
-    For yarn:
-
+    Or with an alternative package manager:
     ```bash
     yarn dev
     ```
-
-    For pnpm:
-
     ```bash
     pnpm dev
     ```
-
-    For bun:
-
     ```bash
     bun dev
     ```
 
 5. Open the app in your browser: Once the server is running, open your browser and go to:
-
     ```
     http://localhost:3000
     ```
 
 You should now see your app running!
 
-### Start Editing
-
+## Start Editing
 You can begin editing the app by modifying the file `app/page.tsx`. The changes will auto-update as you save.
 
 ## Learn More
-
 To learn more about Next.js, take a look at the following resources:
-
 - [Next.js Documentation](https://nextjs.org/docs) – learn about Next.js features and API.
 - [Learn Next.js](https://nextjs.org/learn) – an interactive Next.js tutorial.
 
-You can also check out the [Next.js GitHub repository](https://github.com/vercel/next.js/) – your feedback and contributions are welcome!
+You can also check out [the Next.js GitHub repository](https://github.com/vercel/next.js/) – your feedback and contributions are welcome!
 
 ## Deploy on Vercel
-
 The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
 
 Check out the [Next.js deployment documentation](https://nextjs.org/docs/deployment) for more details.
-
----
-
 ## Overview of `route.ts`
 
 The core of the app's crawling functionality is handled in the `route.ts` file. Here's a breakdown:
