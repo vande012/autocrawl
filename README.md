@@ -82,6 +82,28 @@ To learn more about Next.js, take a look at the following resources:
 - [Next.js Documentation](https://nextjs.org/docs) – learn about Next.js features and API.
 - [Learn Next.js](https://nextjs.org/learn) – an interactive Next.js tutorial.
 
+## Updating the Docker Image
+After making code changes, follow these steps to update the Docker image:
+
+Build a new Docker image with the updated code:
+```bashCopydocker build -t vande012/autocrawl:latest .```
+
+(Optional) Create a specific version tag:
+```bashCopydocker tag vande012/autocrawl:latest vande012/autocrawl:v1.1```
+Replace 'v1.1' with your desired version number.
+Push the updated image to Docker Hub:
+```bashCopydocker push vande012/autocrawl:latest```
+If you created a version tag, push that too:
+```bashCopydocker push vande012/autocrawl:v1.1```
+
+Users can now pull the updated image using:
+```bashCopydocker pull vande012/autocrawl:latest```
+Or the specific version:
+```bashCopydocker pull vande012/autocrawl:v1.1```
+
+
+Remember to update the README or documentation if there are any changes in functionality or usage.
+
 ## Overview of `route.ts`
 
 The core of the app's crawling functionality is handled in the `route.ts` file. Here's a breakdown:
