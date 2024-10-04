@@ -4,7 +4,7 @@ import * as cheerio from 'cheerio';
 import pLimit from 'p-limit';
 
 const DEFAULT_USER_AGENT = 'LLw7Ra4T5fuF';
-const CONCURRENT_REQUESTS = 5;
+const CONCURRENT_REQUESTS = 10;
 
 export async function POST(request: NextRequest) {
   const { url, checkAltText, searchTerm } = await request.json();
