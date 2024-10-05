@@ -163,7 +163,7 @@ const ResultsTable: React.FC<ResultsTableProps> = ({ results, checkAltText, sear
               </TableHead>
               <TableHead>
                 <Button variant="ghost" onClick={() => handleSort("statusCode")}>
-                  Status Code {sortColumn === "statusCode" && (sortDirection === "asc" ? <ArrowUp className="ml-2 h-4 w-4" /> : <ArrowDown className="ml-2 h-4 w-4" />)}
+                  Status Code {sortColumn === "statusCode" && (sortDirection === "asc" ? <ArrowUp className="ml-2 h-4 w-4 " /> : <ArrowDown className="ml-2 h-4 w-4" />)}
                 </Button>
               </TableHead>
               <TableHead>
@@ -185,7 +185,7 @@ const ResultsTable: React.FC<ResultsTableProps> = ({ results, checkAltText, sear
             {filteredAndSortedResults.map((result, index) => (
               <TableRow key={index}>
                 <TableCell className="font-medium">{result.url}</TableCell>
-                <TableCell>
+                <TableCell className="text-center">
                   <span className={`font-bold ${getStatusCodeClass(result.statusCode)}`}>
                     {result.statusCode}
                   </span>

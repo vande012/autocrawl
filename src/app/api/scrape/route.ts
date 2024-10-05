@@ -2,9 +2,12 @@ import { NextRequest, NextResponse } from 'next/server';
 import axios, { AxiosError } from 'axios';
 import * as cheerio from 'cheerio';
 import pLimit from 'p-limit';
+import { RobotsTxt } from 'robots-txt-parse';
 
 const DEFAULT_USER_AGENT = 'LLw7Ra4T5fuF';
 const CONCURRENT_REQUESTS = 10;
+const MAX_DEPTH = 5;
+const BATCH_SIZE = 10;
 
 export async function POST(request: NextRequest) {
   const { url, checkAltText, searchTerm } = await request.json();
@@ -79,6 +82,11 @@ type UpdateData = {
 
 type SendUpdate = (data: UpdateData) => void;
 
+interface QueueItem {
+  url: string;
+  depth: number;
+}
+
 class Crawler {
   private baseUrl: string;
   private checkAltText: boolean;
@@ -87,7 +95,9 @@ class Crawler {
   private urlsFound: number = 0;
   private urlsProcessed: number = 0;
   private limit: ReturnType<typeof pLimit>;
-  private queue: string[] = [];
+  private queue: QueueItem[] = [];
+  private robotsTxt: any;
+  private updateBuffer: UpdateData[] = [];
 
   constructor(baseUrl: string, checkAltText: boolean, searchTerm: string) {
     this.baseUrl = baseUrl;
@@ -97,16 +107,43 @@ class Crawler {
   }
 
   async crawl(sendUpdate: SendUpdate): Promise<void> {
+    await this.fetchRobotsTxt();
     this.urlsFound = 1;
-    this.queue.push(this.baseUrl);
+    this.queue.push({ url: this.baseUrl, depth: 0 });
 
     while (this.queue.length > 0) {
       const batch = this.queue.splice(0, CONCURRENT_REQUESTS);
-      const promises = batch.map(url => this.limit(() => this.crawlPage(url, sendUpdate)));
+      const promises = batch.map(item => this.limit(() => this.crawlPage(item, sendUpdate)));
       await Promise.all(promises);
+      this.flushUpdateBuffer(sendUpdate);
     }
 
+    this.flushUpdateBuffer(sendUpdate);
     sendUpdate({ status: 'Completed' });
+  }
+
+  private async fetchRobotsTxt(): Promise<void> {
+    try {
+      const robotsTxtUrl = new URL('/robots.txt', this.baseUrl).href;
+      const response = await axios.get(robotsTxtUrl);
+      const robotsTxt = new RobotsTxt(response.data);
+      this.robotsTxt = robotsTxt;
+    } catch (error) {
+      console.error('Error fetching robots.txt:', error);
+      this.robotsTxt = null;
+    }
+  }
+  
+  private isAllowedByRobotsTxt(url: string): boolean {
+    if (!this.robotsTxt) return true;
+    return this.robotsTxt.isAllowed(DEFAULT_USER_AGENT, url);
+  }
+
+  private normalizeUrl(url: string): string {
+    const parsedUrl = new URL(url);
+    parsedUrl.hash = '';
+    parsedUrl.search = '';
+    return parsedUrl.href;
   }
 
   private isValidUrl(url: string): boolean {
@@ -114,22 +151,23 @@ class Crawler {
     const path = parsedUrl.pathname;
     
     if (
-      url.includes('#') ||
+      url.includes('#') || 
       path.startsWith('/inventory') ||
       path.endsWith('.php') ||
       path.endsWith('.css') ||
-      path.endsWith('.js') ||
-      parsedUrl.search !== ''
+      path.endsWith('.js')
     ) {
       return false;
     }
     
-    return parsedUrl.origin === new URL(this.baseUrl).origin;
+    return parsedUrl.origin === new URL(this.baseUrl).origin && this.isAllowedByRobotsTxt(url);
   }
 
-  private async crawlPage(url: string, sendUpdate: SendUpdate): Promise<void> {
-    if (this.visited.has(url)) return;
-    this.visited.add(url);
+  private async crawlPage(item: QueueItem, sendUpdate: SendUpdate): Promise<void> {
+    const { url, depth } = item;
+    const normalizedUrl = this.normalizeUrl(url);
+    if (this.visited.has(normalizedUrl) || depth > MAX_DEPTH) return;
+    this.visited.add(normalizedUrl);
 
     try {
       const response = await axios.get(url, {
@@ -155,22 +193,11 @@ class Crawler {
 
         if (this.checkAltText) {
           const imagesWithoutAlt = $('img').filter((_, el) => {
-            const $el = $(el);
-            const alt = $el.attr('alt');
-            // Check if alt attribute is missing or empty (ignoring whitespace)
+            const alt = $(el).attr('alt');
             return typeof alt === 'undefined' || alt.trim() === '';
           }).map((_, el) => {
             const src = $(el).attr('src');
-            if (src && src.trim() !== '') {
-              try {
-                // Convert relative URLs to absolute URLs
-                return new URL(src, url).href;
-              } catch (error) {
-                console.error(`Invalid image URL: ${src}`);
-                return null;
-              }
-            }
-            return null;
+            return src ? new URL(src, url).href : null;
           }).get().filter(Boolean);
           
           if (imagesWithoutAlt.length > 0) {
@@ -182,32 +209,56 @@ class Crawler {
           urlStatus.containsSearchTerm = response.data.includes(this.searchTerm);
         }
 
-        $('a').each((_, element) => {
-          const href = $(element).attr('href');
-          if (href) {
-            try {
-              const newUrl = new URL(href, url).href;
-              if (this.isValidUrl(newUrl) && !this.visited.has(newUrl)) {
-                this.urlsFound++;
-                this.queue.push(newUrl);
+        if (depth < MAX_DEPTH) {
+          $('a').each((_, element) => {
+            const href = $(element).attr('href');
+            if (href) {
+              try {
+                const newUrl = new URL(href, url).href;
+                if (this.isValidUrl(newUrl) && !this.visited.has(this.normalizeUrl(newUrl))) {
+                  this.urlsFound++;
+                  this.queue.push({ url: newUrl, depth: depth + 1 });
+                }
+              } catch (error) {
+                console.error(`Invalid URL: ${href}`);
               }
-            } catch (error) {
-              console.error(`Invalid URL: ${href}`);
             }
-          }
-        });
+          });
+        }
       }
 
       this.urlsProcessed++;
-      sendUpdate({ 
+      this.updateBuffer.push({ 
         urlStatus,
         progress: {
           urlsFound: this.urlsFound,
           urlsProcessed: this.urlsProcessed
         }
       });
+
+      if (this.updateBuffer.length >= BATCH_SIZE) {
+        this.flushUpdateBuffer(sendUpdate);
+      }
     } catch (error) {
-      
+      console.error(`Error crawling ${url}:`, error);
+      this.urlsProcessed++;
+      this.updateBuffer.push({ 
+        urlStatus: {
+          url,
+          statusCode: (error as AxiosError).response?.status || 0,
+          origin: new URL(url).origin,
+          error: (error as Error).message
+        },
+        progress: {
+          urlsFound: this.urlsFound,
+          urlsProcessed: this.urlsProcessed
+        }
+      });
     }
+  }
+
+  private flushUpdateBuffer(sendUpdate: SendUpdate): void {
+    this.updateBuffer.forEach(update => sendUpdate(update));
+    this.updateBuffer = [];
   }
 }
