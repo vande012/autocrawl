@@ -121,55 +121,72 @@ To learn more about Next.js, take a look at the following resources:
 
 Remember to update the README or documentation if there are any changes in functionality or usage.
 
-## Overview of `route.ts`
+# route.ts Documentation
 
-The core of the app's crawling functionality is handled in the `route.ts` file. Here's a breakdown:
+## Overview
 
-### Imports and Interfaces
+This file implements a web crawler using Next.js API routes. It provides a streaming API endpoint that crawls web pages, checks their status, and optionally looks for missing alt text on images or searches for specific terms.
 
-The code starts by importing necessary libraries and defining an interface for the `UrlStatus` object.
+## Key Components
 
-### Constants
+### POST Handler
 
-Several constants are defined, including:
-- User agent
-- Concurrent request limit
-- Timeout duration
-- Maximum number of URLs to check
+- Accepts parameters: `url`, `checkAltText`, and `searchTerm`
+- Creates a `ReadableStream` to stream results back to the client
+- Utilizes the `Crawler` class to perform the crawling operation
 
-### Helper Functions
+### Crawler Class
 
-- **`isValidUrl`**: Checks if a URL is valid based on certain criteria (same domain, allowed file extensions).
-- **`stripFragmentAndQuery`**: Removes fragments and query strings from URLs.
-- **`checkUrlStatus`**: Performs an HTTP request to check the status of a given URL.
+The heart of the crawling functionality, responsible for:
 
-### Main Crawling Function (`crawlAndCheck`)
+- Fetching and parsing robots.txt
+- Managing a queue of URLs to crawl
+- Concurrent crawling of pages
+- Checking page status, alt text, and search terms
+- Sending updates on crawl progress
 
-This is the core function that performs the web crawling and URL checking. Here's how it works:
+## Key Features
 
-1. Initializes a queue with the starting URL.
-2. Processes URLs from the queue in batches, using `pLimit` to limit concurrent requests.
-3. For each URL:
-    - Checks if the URL has been processed before.
-    - Validates the URL.
-    - Checks the URL's status using `checkUrlStatus`.
-    - Writes the status and progress to the stream.
-    - If the URL is valid and the depth limit hasn't been reached, it crawls the page for more links and adds them to the queue.
+1. **Streaming Results**: Uses `ReadableStream` to send results in real-time.
+2. **Concurrent Requests**: Utilizes `pLimit` to manage concurrent requests (default: 10).
+3. **Depth-Limited Crawling**: Implements a maximum depth (default: 5) to prevent infinite crawling.
+4. **Robots.txt Compliance**: Fetches and respects robots.txt rules.
+5. **URL Normalization**: Normalizes URLs to prevent duplicate crawling.
+6. **Batched Updates**: Buffers updates and sends them in batches to reduce overhead.
 
-### POST Request Handler
+## Performance Considerations
 
-This function handles the incoming POST request:
+### Server Requests
 
-1. Sets up a `TransformStream` for writing data.
-2. Extracts the URL from the request body.
-3. Calls `crawlAndCheck` with the provided URL.
-4. Streams the results back to the client in real-time.
-5. Handles errors and closes the stream when finished.
+- **Concurrent Requests**: Managed by `pLimit`, set to 10 by default. Adjust `CONCURRENT_REQUESTS` based on server capacity.
+- **Rate Limiting**: Consider implementing rate limiting to prevent overwhelming target servers.
+- **Robots.txt Compliance**: Helps avoid overloading servers and respects site owners' wishes.
 
-### Key Features
+### Speed Optimizations
 
-- **Streaming**: Results are streamed back to the client in real-time, rather than waiting for all URLs to be checked.
-- **Concurrency**: Uses `pLimit` to limit the number of concurrent requests, preventing overload of the target server.
-- **Depth-limited crawling**: Crawls links found on pages up to a certain depth, allowing for more comprehensive checking.
-- **Error handling**: Errors are caught and reported both for individual URL checks and the overall process.
-- **Progress reporting**: Provides regular updates on the progress of the crawl.
+- **URL Filtering**: Implements `isValidUrl` to quickly filter out unnecessary URLs.
+- **Depth Limiting**: Prevents excessive crawling with `MAX_DEPTH`.
+- **Batched Updates**: Reduces the number of messages sent to the client.
+- **URL Normalization**: Prevents recrawling of the same page with slight URL differences.
+
+## Usage Considerations
+
+- **Memory Usage**: For large sites, monitor memory usage as the visited URLs set can grow large.
+- **Error Handling**: Implements error catching and logging for robustness.
+- **Customization**: Easily customizable for different crawling needs (alt text checking, term searching).
+
+## Configuration
+
+Key constants that can be adjusted:
+
+- `DEFAULT_USER_AGENT`: The user agent string used for requests.
+- `CONCURRENT_REQUESTS`: Number of concurrent requests allowed.
+- `MAX_DEPTH`: Maximum depth for crawling.
+- `BATCH_SIZE`: Number of updates to buffer before sending.
+
+## Future Improvements
+
+- Implement caching for repeated crawls of the same site.
+- Add more sophisticated URL parsing and normalization.
+- Implement a more robust queueing system for very large sites.
+- Consider using a worker thread pool for CPU-intensive tasks.
