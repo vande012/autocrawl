@@ -82,24 +82,41 @@ To learn more about Next.js, take a look at the following resources:
 - [Next.js Documentation](https://nextjs.org/docs) – learn about Next.js features and API.
 - [Learn Next.js](https://nextjs.org/learn) – an interactive Next.js tutorial.
 
-## Updating the Docker Image
-After making code changes, follow these steps to update the Docker image:
+# Updating and Running Your Docker Image
 
-Build a new Docker image with the updated code:
-```bashCopydocker build -t vande012/autocrawl:latest .```
+1. **Save and Commit Changes**: 
+   Ensure all your code changes are saved and committed to your project.
 
-(Optional) Create a specific version tag:
-```bashCopydocker tag vande012/autocrawl:latest vande012/autocrawl:v1.1```
-Replace 'v1.1' with your desired version number.
-Push the updated image to Docker Hub:
-```bashCopydocker push vande012/autocrawl:latest```
-If you created a version tag, push that too:
-```bashCopydocker push vande012/autocrawl:v1.1```
+2. **Navigate to Project Directory**:
+   Open a terminal and cd to your project's root directory.
 
-Users can now pull the updated image using:
-```bashCopydocker pull vande012/autocrawl:latest```
-Or the specific version:
-```bashCopydocker pull vande012/autocrawl:v1.1```
+3. **Build New Docker Image**:
+   ```bash
+   docker build -t vande012/autocrawl:latest .
+   ```
+   This builds a new image tagged as 'latest'.
+
+4. **Push to Docker Hub** (optional, but recommended for distribution):
+   ```bash
+   docker push vande012/autocrawl:latest
+   ```
+
+5. **Run New Container**:
+   ```bash
+   docker run -p 3000:3000 vande012/autocrawl:latest
+   ```
+   This runs a container from your new image, mapping port 3000.
+
+6. **Verify**: 
+   Open a web browser and go to `http://localhost:3000` to check if your app is running with the updates.
+
+7. **Cleanup** (optional):
+   To remove old containers and images:
+   ```bash
+   docker container prune  # Removes stopped containers
+   docker image prune      # Removes unused images
+   ```
+
 
 
 Remember to update the README or documentation if there are any changes in functionality or usage.
