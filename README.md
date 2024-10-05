@@ -159,7 +159,6 @@ The heart of the crawling functionality, responsible for:
 ### Server Requests
 
 - **Concurrent Requests**: Managed by `pLimit`, set to 10 by default. Adjust `CONCURRENT_REQUESTS` based on server capacity.
-- **Rate Limiting**: Consider implementing rate limiting to prevent overwhelming target servers.
 - **Robots.txt Compliance**: Helps avoid overloading servers and respects site owners' wishes.
 
 ### Speed Optimizations
@@ -169,11 +168,6 @@ The heart of the crawling functionality, responsible for:
 - **Batched Updates**: Reduces the number of messages sent to the client.
 - **URL Normalization**: Prevents recrawling of the same page with slight URL differences.
 
-## Usage Considerations
-
-- **Memory Usage**: For large sites, monitor memory usage as the visited URLs set can grow large.
-- **Error Handling**: Implements error catching and logging for robustness.
-- **Customization**: Easily customizable for different crawling needs (alt text checking, term searching).
 
 ## Configuration
 
@@ -184,9 +178,3 @@ Key constants that can be adjusted:
 - `MAX_DEPTH`: Maximum depth for crawling.
 - `BATCH_SIZE`: Number of updates to buffer before sending.
 
-## Future Improvements
-
-- Implement caching for repeated crawls of the same site.
-- Add more sophisticated URL parsing and normalization.
-- Implement a more robust queueing system for very large sites.
-- Consider using a worker thread pool for CPU-intensive tasks.
