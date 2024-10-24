@@ -7,7 +7,7 @@ import { RobotsTxt } from 'robots-txt-parse';
 const DEFAULT_USER_AGENT = 'LLw7Ra4T5fuF';
 const CONCURRENT_REQUESTS = 10;
 const MAX_DEPTH = 5;
-const BATCH_SIZE = 10;
+
 
 export async function POST(request: NextRequest) {
   const { url, checkAltText, searchTerm } = await request.json();
@@ -42,6 +42,8 @@ export async function POST(request: NextRequest) {
           console.error('Error enqueueing error message:', enqueueError);
         }
       } finally {
+        // Move isStreamClosed to the stream context
+        (this as any).isStreamClosed = true; // Mark the stream as closed
         try {
           controller.close();
         } catch (closeError) {
@@ -85,6 +87,7 @@ type SendUpdate = (data: UpdateData) => void;
 interface QueueItem {
   url: string;
   depth: number;
+  referrer?: string; // Add referrer to track where the link was found
 }
 
 class Crawler {
@@ -98,6 +101,9 @@ class Crawler {
   private queue: QueueItem[] = [];
   private robotsTxt: any;
   private updateBuffer: UpdateData[] = [];
+  private maxRetries: number = 3; // Maximum number of retries for 500 errors
+  private retryDelay: number = 2000; // Delay in milliseconds before retrying
+  private isStreamClosed: boolean = false; // Declare isStreamClosed
 
   constructor(baseUrl: string, checkAltText: boolean, searchTerm: string) {
     this.baseUrl = baseUrl;
@@ -106,20 +112,9 @@ class Crawler {
     this.limit = pLimit(CONCURRENT_REQUESTS);
   }
 
-  async crawl(sendUpdate: SendUpdate): Promise<void> {
-    await this.fetchRobotsTxt();
-    this.urlsFound = 1;
-    this.queue.push({ url: this.baseUrl, depth: 0 });
-
-    while (this.queue.length > 0) {
-      const batch = this.queue.splice(0, CONCURRENT_REQUESTS);
-      const promises = batch.map(item => this.limit(() => this.crawlPage(item, sendUpdate)));
-      await Promise.all(promises);
-      this.flushUpdateBuffer(sendUpdate);
-    }
-
-    this.flushUpdateBuffer(sendUpdate);
-    sendUpdate({ status: 'Completed' });
+  // Add this method to the Crawler class
+  private delay(ms: number): Promise<void> {
+    return new Promise(resolve => setTimeout(resolve, ms));
   }
 
   private async fetchRobotsTxt(): Promise<void> {
@@ -164,101 +159,151 @@ class Crawler {
   }
 
   private async crawlPage(item: QueueItem, sendUpdate: SendUpdate): Promise<void> {
-    const { url, depth } = item;
+    const { url, depth, referrer } = item;
     const normalizedUrl = this.normalizeUrl(url);
     if (this.visited.has(normalizedUrl) || depth > MAX_DEPTH) return;
     this.visited.add(normalizedUrl);
 
-    try {
-      const response = await axios.get(url, {
-        headers: {
-          'User-Agent': DEFAULT_USER_AGENT
-        },
-        maxRedirects: 0,
-        validateStatus: function (status) {
-          return status >= 200 && status < 600;
-        },
-      });
+    let attempts = 0;
 
-      const urlStatus: UrlStatus = {
-        url,
-        statusCode: response.status,
-        origin: new URL(url).origin,
-      };
+    while (attempts < this.maxRetries) {
+      try {
+        const response = await axios.get(url, {
+          headers: {
+            'User-Agent': DEFAULT_USER_AGENT
+          },
+          maxRedirects: 0,
+          validateStatus: function (status) {
+            return status >= 200 && status < 600;
+          },
+        });
 
-      if (response.status >= 300 && response.status < 400) {
-        urlStatus.redirectUrl = response.headers.location;
-      } else if (response.status === 200) {
-        const $ = cheerio.load(response.data);
+        const urlStatus: UrlStatus = {
+          url,
+          statusCode: response.status,
+          // Ensure origin is always a string
+          origin: response.status < 300 ? '' : (referrer || 'Direct Access'), 
+        };
 
-        if (this.checkAltText) {
-          const imagesWithoutAlt = $('img').filter((_, el) => {
-            const alt = $(el).attr('alt');
-            return typeof alt === 'undefined' || alt.trim() === '';
-          }).map((_, el) => {
-            const src = $(el).attr('src');
-            return src ? new URL(src, url).href : null;
-          }).get().filter(Boolean);
-          
-          if (imagesWithoutAlt.length > 0) {
-            urlStatus.imagesWithoutAlt = imagesWithoutAlt;
+        if (response.status >= 300 && response.status < 400) {
+          urlStatus.redirectUrl = response.headers.location;
+        } else if (response.status === 200) {
+          const $ = cheerio.load(response.data);
+
+  
+          if (this.checkAltText) {
+            const imagesWithoutAlt = $('img').filter((_, el) => {
+              const alt = $(el).attr('alt');
+              return typeof alt === 'undefined' || alt.trim() === '';
+            }).map((_, el) => {
+              const src = $(el).attr('src');
+              return src ? new URL(src, url).href : null;
+            }).get().filter(Boolean);
+  
+            if (imagesWithoutAlt.length > 0) {
+              urlStatus.imagesWithoutAlt = imagesWithoutAlt;
+            }
+          }
+  
+          if (this.searchTerm) {
+            urlStatus.containsSearchTerm = response.data.includes(this.searchTerm);
+          }
+  
+          if (depth < MAX_DEPTH) {
+            $('a').each((_, element) => {
+              const href = $(element).attr('href');
+              if (href) {
+                try {
+                  const newUrl = new URL(href, url).href;
+                  if (this.isValidUrl(newUrl) && !this.visited.has(this.normalizeUrl(newUrl))) {
+                    this.urlsFound++;
+                    this.queue.push({ 
+                      url: newUrl, 
+                      depth: depth + 1,
+                      referrer: url // Set current URL as referrer for the new URL
+                    });
+                  }
+                } catch (error) {
+                  console.error(`Invalid URL: ${href}`);
+                }
+              }
+            });
           }
         }
 
-        if (this.searchTerm) {
-          urlStatus.containsSearchTerm = response.data.includes(this.searchTerm);
-        }
+        this.urlsProcessed++;
+        this.updateBuffer.push({ 
+          urlStatus,
+          progress: {
+            urlsFound: this.urlsFound,
+            urlsProcessed: this.urlsProcessed
+          }
+        });
 
-        if (depth < MAX_DEPTH) {
-          $('a').each((_, element) => {
-            const href = $(element).attr('href');
-            if (href) {
-              try {
-                const newUrl = new URL(href, url).href;
-                if (this.isValidUrl(newUrl) && !this.visited.has(this.normalizeUrl(newUrl))) {
-                  this.urlsFound++;
-                  this.queue.push({ url: newUrl, depth: depth + 1 });
-                }
-              } catch (error) {
-                console.error(`Invalid URL: ${href}`);
-              }
+        return;
+
+      } catch (error) {
+        const statusCode = (error as AxiosError).response?.status || 0;
+
+        if (statusCode >= 400) {
+          // Create a new UrlStatus for the broken link
+          const brokenLinkStatus: UrlStatus = {
+            url,
+            statusCode,
+            origin: referrer || 'Direct Access', // Use referrer as origin for broken links
+            error: (error as Error).message,
+          };
+
+          this.urlsProcessed++;
+          this.updateBuffer.push({ 
+            urlStatus: brokenLinkStatus,
+            progress: {
+              urlsFound: this.urlsFound,
+              urlsProcessed: this.urlsProcessed
             }
           });
-        }
-      }
 
-      this.urlsProcessed++;
-      this.updateBuffer.push({ 
-        urlStatus,
-        progress: {
-          urlsFound: this.urlsFound,
-          urlsProcessed: this.urlsProcessed
+          if (statusCode < 500) return;
         }
-      });
 
-      if (this.updateBuffer.length >= BATCH_SIZE) {
-        this.flushUpdateBuffer(sendUpdate);
-      }
-    } catch (error) {
-      console.error(`Error crawling ${url}:`, error);
-      this.urlsProcessed++;
-      this.updateBuffer.push({ 
-        urlStatus: {
-          url,
-          statusCode: (error as AxiosError).response?.status || 0,
-          origin: new URL(url).origin,
-          error: (error as Error).message
-        },
-        progress: {
-          urlsFound: this.urlsFound,
-          urlsProcessed: this.urlsProcessed
+        if (statusCode >= 500) {
+          attempts++;
+          if (attempts < this.maxRetries) {
+            await this.delay(this.retryDelay);
+            continue;
+          }
         }
-      });
+
+        return;
+      }
     }
   }
 
+  async crawl(sendUpdate: SendUpdate): Promise<void> {
+    await this.fetchRobotsTxt();
+    this.urlsFound = 1;
+    // Start with no referrer for the initial URL
+    this.queue.push({ url: this.baseUrl, depth: 0, referrer: undefined });
+
+    while (this.queue.length > 0) {
+      const batch = this.queue.splice(0, CONCURRENT_REQUESTS);
+      const promises = batch.map(item => this.limit(() => this.crawlPage(item, sendUpdate)));
+      await Promise.all(promises);
+      this.flushUpdateBuffer(sendUpdate);
+    }
+
+    this.flushUpdateBuffer(sendUpdate);
+    sendUpdate({ status: 'Completed' });
+  }
+
+  // Add this method to the Crawler class
   private flushUpdateBuffer(sendUpdate: SendUpdate): void {
-    this.updateBuffer.forEach(update => sendUpdate(update));
-    this.updateBuffer = [];
+    if (this.isStreamClosed) return; // Prevent further updates if the stream is closed
+    while (this.updateBuffer.length > 0) {
+      const update = this.updateBuffer.shift();
+      if (update) {
+        sendUpdate(update);
+      }
+    }
   }
 }

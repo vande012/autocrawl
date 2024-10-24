@@ -240,7 +240,11 @@ const ResultsTable: React.FC<ResultsTableProps> = ({
           <TableBody>
             {filteredAndSortedResults.map((result, index) => (
               <TableRow key={index}>
-                <TableCell className="font-medium">{result.url}</TableCell>
+                <TableCell className="font-medium">
+                  <a href={result.url} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">
+                    {result.url}
+                  </a>
+                </TableCell>
                 <TableCell className="text-center">
                   <span
                     className={`font-bold ${getStatusCodeClass(
@@ -250,7 +254,15 @@ const ResultsTable: React.FC<ResultsTableProps> = ({
                     {result.statusCode}
                   </span>
                 </TableCell>
-                <TableCell>{result.origin || "N/A"}</TableCell>
+                <TableCell>
+                  {result.origin ? (
+                    <a href={result.origin} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">
+                      {result.origin}
+                    </a>
+                  ) : (
+                    "N/A"
+                  )}
+                </TableCell>
                 {checkAltText && (
                   <TableCell>
                     {result.imagesWithoutAlt &&
