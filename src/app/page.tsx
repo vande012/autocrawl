@@ -7,7 +7,7 @@ import { Separator } from "@/components/ui/separator";
 export default function ScraperPage() {
   return (
     <div className="min-h-screen bg-gradient-to-b from-gray-500 to-gray-300 py-8 px-4">
-      <div className="container mx-auto max-w-6xl">
+      <div className="container mx-auto max-w-9xl">
         <Card className="bg-gray-300 shadow-xl">
           <CardHeader className="pb-0">
             <div className="flex flex-col md:flex-row items-center md:items-start">
